@@ -169,7 +169,7 @@ fn sample_loop(shared: Arc<Mutex<Snapshot>>) {
 
         tick = tick.wrapping_add(1);
         if tick % 3 == 1 {
-            gpu = query_nvidia();
+            gpu = query_gpu();
         }
 
         let total = sys.total_memory() as f32;
@@ -188,6 +188,107 @@ fn sample_loop(shared: Arc<Mutex<Snapshot>>) {
         if let Ok(mut sink) = shared.lock() {
             *sink = snap;
         }
+    }
+}
+
+/// GPU 占用采集入口：先试 NVIDIA 官方工具（顺带拿显存），
+/// 失败则用 Windows 原生 GPU Engine 性能计数器，兼容 AMD / Intel 等所有 WDDM 显卡。
+/// 两条路都不通时返回空，G 小圆显示「—」，不影响其余三项。
+fn query_gpu() -> (Option<f32>, Option<(f32, f32)>) {
+    let nvidia = query_nvidia();
+    if nvidia.0.is_some() {
+        return nvidia;
+    }
+    #[cfg(windows)]
+    {
+        let util = query_gpu_counter();
+        if util.is_some() {
+            return (util, None);
+        }
+    }
+    (None, None)
+}
+
+/// 用 PDH 读取 `\GPU Engine(*)\Utilization Percentage` 的 3D 引擎实例并求和。
+/// 这是 Windows 任务管理器 GPU 曲线的数据源，N / A / Intel 显卡统一适用。
+/// 计数是「每秒变化率」，必须采集两次才有有效值，所以首次调用会积一次样本。
+#[cfg(windows)]
+fn query_gpu_counter() -> Option<f32> {
+    use windows::Win32::System::Performance::{
+        PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData,
+        PdhGetFormattedCounterArrayW, PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W,
+        PDH_FMT_DOUBLE, PDH_MORE_DATA,
+    };
+    use windows::core::PCWSTR;
+
+    const PATH: &str = "\\GPU Engine(*)\\Utilization Percentage";
+
+    unsafe {
+        let mut query: isize = 0;
+        if PdhOpenQueryW(PCWSTR::null(), 0, &mut query) != 0 {
+            return None;
+        }
+
+        let path: Vec<u16> = PATH.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut counter: isize = 0;
+        let added = PdhAddEnglishCounterW(query, PCWSTR(path.as_ptr()), 0, &mut counter) == 0;
+        if !added {
+            let _ = PdhCloseQuery(query);
+            return None;
+        }
+
+        // 两次采集之间留出一小段时间，否则rate型计数器读数为 0。
+        let _ = PdhCollectQueryData(query);
+        std::thread::sleep(Duration::from_millis(120));
+        if PdhCollectQueryData(query) != 0 {
+            let _ = PdhCloseQuery(query);
+            return None;
+        }
+
+        let mut size = 0u32;
+        let mut count = 0u32;
+        let rc = PdhGetFormattedCounterArrayW(
+            counter, PDH_FMT_DOUBLE, &mut size, &mut count, None,
+        );
+        if rc != PDH_MORE_DATA || size == 0 {
+            let _ = PdhCloseQuery(query);
+            return None;
+        }
+        // size 含字符串数据、不一定是结构体的整数倍，必须向上取整，
+        // 否则 PDH 按 size 写入时会越过 vec 末尾，造成堆损坏。
+        let slots = size as usize / std::mem::size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>() + 1;
+        let mut items = vec![PDH_FMT_COUNTERVALUE_ITEM_W::default(); slots];
+        let rc = PdhGetFormattedCounterArrayW(
+            counter, PDH_FMT_DOUBLE, &mut size, &mut count, Some(items.as_mut_ptr()),
+        );
+        if rc != 0 || count == 0 {
+            let _ = PdhCloseQuery(query);
+            return None;
+        }
+
+        // 只统计 3D 引擎实例：这是任务管理器「GPU 利用率」的主口径，
+        // 排除 Copy / VideoDecode 等专用引擎，避免把媒体解码算成核心占用。
+        // 注意 szName 指向 PDH 内部缓冲区，必须在关闭 query 之前读完。
+        let mut total = 0.0f64;
+        for item in items.iter().take(count as usize) {
+            if item.FmtValue.CStatus != 0 || item.szName.0.is_null() {
+                continue;
+            }
+            let name_ptr = item.szName.0;
+            let mut len = 0usize;
+            while *name_ptr.add(len) != 0 && len < 256 {
+                len += 1;
+            }
+            let name = String::from_utf16_lossy(std::slice::from_raw_parts(name_ptr, len));
+            if name.to_ascii_lowercase().contains("engtype_3d") {
+                total += item.FmtValue.Anonymous.doubleValue.max(0.0);
+            }
+        }
+        let _ = PdhCloseQuery(query);
+        if total < 0.0 || !total.is_finite() {
+            return None;
+        }
+        Some((total.min(100.0)) as f32)
     }
 }
 
@@ -307,7 +408,8 @@ impl App {
         let gpu_value = snap.gpu.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into());
         let gpu_sub = match snap.gpu_mem {
             Some((u, t)) => format!("显存 {u:.1}/{t:.1} GB"),
-            None => "未检测到 NVIDIA".to_string(),
+            None if snap.gpu.is_some() => "通用检测 · 显存 —".to_string(),
+            None => "未检测到显卡".to_string(),
         };
         let mem_value = format!("{:.0}%", snap.mem);
         let mem_sub = format!("{:.1}/{:.1} GB", snap.mem_used, snap.mem_total);
@@ -377,5 +479,19 @@ fn spark(c: &Card, x: f32, y: f32, w: f32, h: f32, values: &[f32], color: Color3
     c.path(&points, 1.4, color);
     if let Some(&(px, py)) = points.last() {
         c.circle(px, py, 1.8, theme::WHITE);
+    }
+}
+
+#[cfg(all(test, windows))]
+mod gpu_counter_tests {
+    use super::query_gpu_counter;
+
+    #[test]
+    fn windows_gpu_engine_counter_returns_reading() {
+        let reading = query_gpu_counter();
+        assert!(reading.is_some(), "GPU Engine 计数器应可用（含 AMD/Intel/NVIDIA）");
+        let value = reading.unwrap();
+        assert!((0.0..=100.0).contains(&value), "占用率应在 0..100，实际 {value}");
+        eprintln!("PDH GPU Engine reading = {value}%");
     }
 }
