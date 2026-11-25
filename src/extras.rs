@@ -1712,7 +1712,8 @@ impl App {
                         ui.add_enabled_ui(on,|ui|{
                             settings_label(ui,"歌词");
                             settings_card(ui,|ui|{
-                                settings_hint(ui,"歌词固定显示在收起的岛上：播放时岛面显示当前句，展开面板只展示歌曲信息。");
+                                setting_row(ui,"展开页歌词","在音乐页面板内显示同步歌词，可用面板上的「词」按钮切换",&mut self.settings.lyrics_enabled);
+                                setting_row(ui,"岛上歌词","收起时岛面显示当前歌词句",&mut self.settings.island_lyrics);
                                 ui.separator();
                                 let mut advance=-self.settings.lyric_delay_ms as f64/1000.0;
                                 if setting_number(ui,"时间偏移",&mut advance,-5.0,5.0," 秒",0.1){self.settings.lyric_delay_ms=(-advance*1000.0).round()as i32;}

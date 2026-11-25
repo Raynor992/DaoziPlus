@@ -1900,21 +1900,24 @@ fn transient_lyric_failures_retry_but_missing_songs_do_not_loop(){
 }
 
 #[test]
-fn expanded_music_page_shows_song_info_while_lyrics_stay_on_the_island() {
+fn expanded_music_page_shows_lyrics_column_again() {
     let _g=ENV_LOCK.lock().unwrap_or_else(|e|e.into_inner());
     let mut h=H::new();
+    h.app.settings.lyrics_enabled=true;h.app.show_lyrics=true;
     h.media=crate::smtc::NowPlaying{title:"Track".into(),artist:"Artist".into(),position:7.0,duration:120.0,playing:true,..Default::default()};
     h.app.set_lyrics("Track","Artist",120.0,crate::lyrics::parse_lrc("[00:01]上一句\n[00:05]当前歌词\n[00:10]下一句"));
     h.hover(Pos2::new(WIN_W/2.0,12.0),1.0);
-    // 展开页不再有歌词列：歌名占满右侧，歌词只出现在收起的岛上。
-    assert!(!h.shapes.iter().any(|shape|matches!(&shape.shape,egui::Shape::Text(text)
-        if text.galley.text()=="当前歌词" && text.pos.x>H::local(140.0,0.0).x && text.pos.x<H::local(340.0,0.0).x)),"展开页不应再显示歌词列");
-    let title=h.shapes.iter().find_map(|shape|match &shape.shape {
-        egui::Shape::Text(text) if text.galley.text()=="Track"=>Some(text.pos),_=>None,
-    }).unwrap();
-    assert!(title.x>=H::local(140.0,0.0).x,"展开页的歌名应在封面右侧");
-    h.app.open=false;h.frame(vec![]);
-    assert_eq!(h.app.island_lyric().map(|(_,line)|line),Some("当前歌词"),"歌词应固定显示在收起的岛上");
+    // 恢复原版：展开页重新显示歌词列（歌词在封右侧、歌名下方）。
+    let lyric_shown=h.shapes.iter().any(|shape|matches!(&shape.shape,egui::Shape::Text(text)
+        if text.galley.text()=="当前歌词" && text.pos.x>H::local(240.0,0.0).x));
+    assert!(lyric_shown,"恢复原版后展开页应重新显示歌词列");
+    // 「词」按钮关掉后歌词列消失。
+    h.app.show_lyrics=false;h.frame(vec![]);
+    let lyric_hidden=!h.shapes.iter().any(|shape|matches!(&shape.shape,egui::Shape::Text(text)
+        if text.galley.text()=="当前歌词" && text.pos.x>H::local(240.0,0.0).x));
+    assert!(lyric_hidden,"点「词」关闭后展开页不应显示歌词列");
+    h.app.settings.island_lyrics=true;h.app.open=false;h.frame(vec![]);
+    assert_eq!(h.app.island_lyric().map(|(_,line)|line),Some("当前歌词"),"岛上歌词仍可独立显示");
 }
 
 #[test]
@@ -1923,7 +1926,9 @@ fn disabling_lyrics_disconnects_pending_workers(){
     let mut h=H::new();
     h.media=crate::smtc::NowPlaying{source:"KuGou.exe".into(),title:"测试歌曲".into(),artist:"歌手".into(),..Default::default()};
     h.frame(vec![]);h.app.opts.fetch_lyrics=true;
+    // 恢复原版：两个歌词开关都关掉才停止取词。
     h.app.settings.island_lyrics=false;
+    h.app.show_lyrics=false;h.app.settings.lyrics_enabled=false;
     h.app.ly.key="测试歌曲|歌手|0".into();h.app.ly.loading=true;
     let (network,rx)=std::sync::mpsc::channel();h.app.ly.rx=Some(rx);
     let (native,rx)=std::sync::mpsc::channel();h.app.ly.native_rx=Some(rx);
@@ -4489,7 +4494,8 @@ fn fluid_music_seek_draws_solid_played_segment(){
         h.app.settings.skin=crate::model::Skin::Fluid;
         h.media=crate::smtc::NowPlaying{title:"Track".into(),artist:"Artist".into(),position:30.0,duration:120.0,..Default::default()};
         h.hover(Pos2::new(WIN_W/2.0,12.0),1.2);
-        let (x,w,y)=(144.0,182.0,84.0);
+        // 恢复原版：默认展开歌词时进度条为 (44,176,82)。
+        let (x,w,y)=(44.0,176.0,82.0);
         let start=H::local(x,y);
         assert!(h.shapes.iter().any(|s|matches!(&s.shape,egui::Shape::Rect(r)
             if (r.rect.left()-start.x).abs()<1.0 && (r.rect.center().y-start.y).abs()<1.0
@@ -4504,7 +4510,8 @@ fn music_seek_drag_previews_and_commits_on_release(){
         let mut h=H::new();
         h.media=crate::smtc::NowPlaying{source:source.into(),title:"Track".into(),artist:"Artist".into(),position:12.0,duration:120.0,..Default::default()};
         h.hover(Pos2::new(WIN_W/2.0,12.0),1.0);
-        let (x,w,y)=(144.0,182.0,84.0);
+        // 恢复原版：默认展开歌词时进度条为 (44,176,82)。
+        let (x,w,y)=(44.0,176.0,82.0);
         let press=H::local(x+w*0.1,y);h.cursor=Some(press);
         h.frame(vec![egui::Event::PointerMoved(press)]);
         h.frame(vec![egui::Event::PointerButton{pos:press,button:egui::PointerButton::Primary,pressed:true,modifiers:Default::default()}]);
@@ -4524,7 +4531,8 @@ fn old_and_new_qqmusic_seek_and_hold_the_target_after_release(){
         let mut h=H::new();
         h.media=crate::smtc::NowPlaying{source:source.into(),title:"Track".into(),artist:"Artist".into(),position:12.0,duration:120.0,playback_type:crate::smtc::MediaKind::Music,..Default::default()};
         h.hover(Pos2::new(WIN_W/2.0,12.0),1.0);
-        let (x,w,y)=(144.0,182.0,84.0);
+        // 恢复原版：默认展开歌词时进度条为 (44,176,82)。
+        let (x,w,y)=(44.0,176.0,82.0);
         let press=H::local(x+w*0.1,y);h.cursor=Some(press);
         h.frame(vec![egui::Event::PointerMoved(press)]);
         h.frame(vec![egui::Event::PointerButton{pos:press,button:egui::PointerButton::Primary,pressed:true,modifiers:Default::default()}]);
@@ -9187,9 +9195,6 @@ fn perf_pips_preview(){
             h.frame(vec![]);
         }
         if open {h.app.show_page(0);}
-        // 预置滚动起点，便于导出歌名滚动到一半的样子。
-        h.app.music_scroll_title=title.into();
-        h.app.music_scroll_at=h.t-scroll;
         let mut raster=feature_raster_sized(w,hgt);
         let last=shots.iter().map(|(f,_)|*f).max().unwrap_or(89);
         for frame in 0..=last {

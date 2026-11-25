@@ -877,9 +877,8 @@ pub struct App {
     pub(crate) music_seek_quiet_until: f64,
     /// 点了上一首 / 下一首的时刻：先本地把进度归零，等播放器报回新歌位置再交还。
     pub(crate) music_restart_at: Option<f64>,
-    /// 歌名跑马灯：记下当前歌名和换歌时刻，换歌后重新从头滚动。
-    pub(crate) music_scroll_title: String,
-    pub(crate) music_scroll_at: f64,
+    /// 展开音乐页是否显示同步歌词（原版行为，由页面上的「词」按钮切换）。
+    pub(crate) show_lyrics: bool,
     /// 上一次看到的蓝牙设备，用来只在连接/断开时提示一次。
     pub(crate) bt_shown: Vec<crate::bt::Device>,
     bt_initialized: bool,
@@ -912,6 +911,7 @@ impl App {
             s.visuals.selection.bg_fill = theme::alpha_blue(0.45);
         });
         let settings = model::Settings::load();
+        let initial_lyrics = settings.lyrics_enabled;
         let clipboard_on = settings.clipboard_history;
         let (bw, bh) = if settings.minimal { (BAR_W_MIN, BAR_H_MIN) } else { (BAR_W, BAR_H) };
         let focus_seconds=settings.focus_minutes as f32*60.0;
@@ -1019,8 +1019,7 @@ impl App {
             music_seek_ui: None,
             music_seek_quiet_until: 0.0,
             music_restart_at: None,
-            music_scroll_title: String::new(),
-            music_scroll_at: 0.0,
+            show_lyrics: initial_lyrics,
             bt_shown: Vec::new(),
             bt_initialized: false,
             mail: MailState { accounts: mail::load_accounts(), ..Default::default() },
@@ -3384,8 +3383,8 @@ impl App {
 
     fn poll_lyrics(&mut self) {
         if !self.media.is_music(){self.ly=LyricsState::default();return;}
-        // 歌词固定给收起的岛显示：音乐页开着就取词，关掉音乐页才停。
-        if !self.settings.island_lyrics || !self.settings.visible_pages[0] {self.ly=LyricsState::default();return;}
+        // 展开页歌词或岛上歌词任一开启就需要取词；音乐页被隐藏时两者都停。
+        if (!self.show_lyrics && !self.settings.island_lyrics) || !self.settings.visible_pages[0] {self.ly=LyricsState::default();return;}
         let np = &self.media;
         if np.title.is_empty(){self.ly=LyricsState::default();return;}
         let key = format!("{}|{}|{:.0}", np.title, np.artist, np.duration);

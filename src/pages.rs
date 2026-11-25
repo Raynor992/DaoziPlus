@@ -40,63 +40,39 @@ impl App {
     pub(crate) fn page_music(&mut self, c: &Card, _env: &Env, cmds: &mut Vec<Cmd>) {
         let np=self.media.clone();
         let has=!np.title.is_empty();
+        let with_lyrics=has && self.show_lyrics;
         let ctx=c.ui.ctx().clone();
         let playing_t=ctx.animate_bool_with_time(egui::Id::new("np-playing"),np.playing,0.22);
-        // 展开页只展示歌曲信息：歌词固定在收起的岛上，这里把空间让给封面、歌名和进度条。
-        let art_size=88.0;
-        let art_y=8.0;
+        let art_size=if with_lyrics {44.0}else{62.0};
+        let art_y=if with_lyrics {23.0}else{13.0};
         if let Some((image,texture))=&self.music_artwork {
             let [w,h]=image.size;
             let (uw,vh)=if w>h {(h as f32/w as f32,1.0)}else{(1.0,w as f32/h as f32)};
             let uv=Rect::from_center_size(Pos2::new(0.5,0.5),egui::vec2(uw,vh));
-            c.painter.add(egui::epaint::RectShape::filled(c.rect(44.0,art_y,art_size,art_size),12.0*c.s,Color32::WHITE).with_texture(texture.id(),uv));
+            c.painter.add(egui::epaint::RectShape::filled(c.rect(44.0,art_y,art_size,art_size),10.0*c.s,Color32::WHITE).with_texture(texture.id(),uv));
         } else if has {
             let (a,b)=cover_colors(&np.title);
             let cc=c.clipped(44.0,art_y,art_size,art_size);
-            cc.vgrad(44.0,art_y,art_size,art_size,12.0,a,b);
-            paint::note(&cc,44.0+art_size/2.0,art_y+art_size/2.0,art_size*0.38,Color32::from_white_alpha(235));
+            cc.vgrad(44.0,art_y,art_size,art_size,10.0,a,b);
+            paint::note(&cc,44.0+art_size/2.0,art_y+art_size/2.0,art_size*0.39,Color32::from_white_alpha(235));
         } else {
-            c.fill(44.0,art_y,art_size,art_size,12.0,Color32::from_rgb(25,25,27));
-            paint::note(c,44.0+art_size/2.0,art_y+art_size/2.0,art_size*0.38,Color32::from_rgb(110,110,114));
+            c.fill(44.0,13.0,62.0,62.0,13.0,Color32::from_rgb(25,25,27));
+            paint::note(c,75.0,44.0,26.0,Color32::from_rgb(110,110,114));
         }
 
-        let text_x=144.0;
-        let text_width=182.0;
         if !has {
-            c.text(text_x,48.0,"暂无音乐",15.0,W::Bold,theme::WHITE,H::Left);
+            c.text(121.0,47.0,"暂无音乐",14.0,W::Bold,theme::WHITE,H::Left);
         } else {
-            // 歌名太长就横向滚动（跑马灯），不再截断成省略号；换歌后重新从头滚。
-            if self.music_scroll_title!=np.title {self.music_scroll_title=np.title.clone();self.music_scroll_at=self.t;}
-            let scrolling=c.marquee(text_x,44.0,&np.title,16.0,W::Bold,theme::WHITE,text_width,self.t-self.music_scroll_at,16.0);
-            if scrolling {ctx.request_repaint_after(std::time::Duration::from_millis(33));}
-            // 歌词固定显示在收起的岛上；这里没有歌词时给一句状态，并留出重试入口。
-            let status=if self.ly.lyrics.is_some(){None}else{Some(match &self.ly.error {
-                Some(error)=>error.label(),
-                None=>if self.ly.loading {"正在查找歌词…"}else{"暂无歌词"},
-            })};
-            let artist_width=if status.is_some(){88.0}else{text_width};
-            c.text(text_x,68.0,&c.fit(&np.artist,12.0,W::Regular,artist_width),12.0,W::Regular,theme::GRAY,H::Left);
-            if let Some(status)=status {
-                c.text(326.0,68.0,status,9.0,W::Regular,theme::GRAY,H::Right);
-                if self.ly.error.is_some() {
-                    let hit=c.hit(236.0,58.0,90.0,16.0,"lyrics-retry");
-                    if hit.on_hover_text("重新查询当前歌曲的歌词").clicked(){self.ly.key.clear();self.ly.manual_retry=true;}
-                }
-            }
-        }
-
-        // 蓝框：右栏 2×2 四个性能小圆（CPU / 内存 / 网络 / GPU），与收起态同款。
-        if self.settings.show_perf && !self.side() {
-            let px=356.0;
-            let py=62.0;
-            self.paint_perf_pips(c,px,py,17.0,4.0,2);
-            let hit=crate::quota_ui::bar_tooltip(c.hit(px-22.0,py-22.0,44.0,44.0,"music-perf-pips"),self.perf_ring_tip());
-            if hit.clicked(){self.show_page(crate::app::PERF_PAGE);}
+            let text_x=if with_lyrics {99.0}else{121.0};
+            let text_width=if with_lyrics {123.0}else{220.0};
+            let title_size=if with_lyrics {12.0}else{14.0};
+            c.text(text_x,if with_lyrics {41.0}else{53.0},&c.fit(&np.title,title_size,W::Bold,text_width),title_size,W::Bold,theme::WHITE,H::Left);
+            c.text(text_x,if with_lyrics {57.0}else{67.0},&c.fit(&np.artist,size::BODY,W::Regular,text_width),size::BODY,W::Regular,theme::GRAY,H::Left);
+            if with_lyrics {self.draw_music_lyrics(c);}
         }
 
         let tc=if has {theme::WHITE}else{Color32::from_rgb(78,78,82)};
-        // 进度条只占歌名一栏，不再横穿到别处。
-        let (bx,bw,by)=(144.0,182.0,84.0);
+        let (bx,bw,by)=if with_lyrics {(44.0,176.0,82.0)}else{(96.0,221.0,92.6)};
         let bar=c.hit_drag(bx-4.0,by-7.0,bw+8.0,14.0,"m-seek");
         let seek_position=if has && np.duration>0.0 && (bar.is_pointer_button_down_on() || bar.clicked() || bar.drag_stopped()) {
             bar.interact_pointer_pos().or_else(||ctx.input(|i|i.pointer.interact_pos()))
@@ -111,8 +87,8 @@ impl App {
             _=>np.position,
         });
         let frac=if np.duration>0.0 {(position/np.duration).clamp(0.0,1.0) as f32}else{0.0};
-        let (time_y,time_size,right)=(100.0,11.0,326.0);
-        c.text(text_x,time_y,&mmss(position),time_size,W::Regular,tc,H::Left);
+        let (time_y,time_size,right)=if with_lyrics {(100.0,10.0,220.0)}else{(97.0,15.0,375.0)};
+        c.text(44.0,time_y,&mmss(position),time_size,W::Regular,tc,H::Left);
         let remaining=if has && np.duration<=0.0{"--:--".into()}else{format!("-{}",mmss((np.duration-position).max(0.0)))};
         c.text(right,time_y,&remaining,time_size,W::Regular,tc,H::Right);
         let (bh,_)=c.hover_t(&bar);
@@ -150,6 +126,8 @@ impl App {
             if has && hover>0.01 {c.faded(hover).circle(x,y,12.5,Color32::from_white_alpha(20));}
             (response,c.scaled(x,y,1.0-0.1*pressed))
         };
+        let (lyrics_button,lyrics_card)=btn(74.0,26.0,"m-lyr");
+        lyrics_card.text(74.0,y+5.0,"词",14.0,W::Semibold,if !has {ic}else if self.show_lyrics {theme::WHITE}else{theme::GRAY},H::Center);
         let (previous,previous_card)=btn(162.0,30.0,"m-prev");
         paint::skip(&previous_card,162.0,y,-1.0,ic);
         let (play,play_card)=btn(210.5,30.0,"m-play");
@@ -174,6 +152,23 @@ impl App {
             if previous.clicked() {self.music_restart_at=Some(self.t);self.music_seek_ui=None;cmds.push(Cmd::Media(Transport::Prev));}
             if play.clicked() {cmds.push(Cmd::Media(Transport::Toggle));}
             if next.clicked() {self.music_restart_at=Some(self.t);self.music_seek_ui=None;cmds.push(Cmd::Media(Transport::Next));}
+        }
+        if lyrics_button.on_hover_text(if self.show_lyrics {"隐藏歌词"}else{"显示歌词"}).clicked() {
+            if !has {self.say("先放一首歌吧");}
+            else {
+                self.show_lyrics=!self.show_lyrics;
+                self.settings.lyrics_enabled=self.show_lyrics;
+                self.settings.save();
+            }
+        }
+        // 岛上歌词是横向的，只在顶部停靠时提供。
+        if has && !self.side() {
+            let (button,button_card)=capsule(c,279.0,108.0,68.0,20.0,"m-island-lyrics",if self.settings.island_lyrics {Color32::from_gray(39)}else{Color32::from_gray(22)},Color32::from_gray(47));
+            button_card.text(313.0,122.0,"岛上歌词",10.0,W::Semibold,if self.settings.island_lyrics {theme::WHITE}else{theme::GRAY},H::Center);
+            if button.on_hover_text(if self.settings.island_lyrics {"关闭收起时的歌词"}else{"收起时显示当前歌词"}).clicked() {
+                self.settings.island_lyrics=!self.settings.island_lyrics;
+                self.settings.save();
+            }
         }
     }
 
@@ -226,6 +221,47 @@ impl App {
         popup.circle(367.0,head,if track.dragged(){5.5}else{4.5},ink);
         popup.fill(353.0,82.0,28.0,20.0,6.0,paint::mix(theme::BTN,theme::BTN_HOVER,if muted{1.0}else{hover}));
         popup.scaled(367.0,92.0,1.0-0.06*press).centered_text(367.0,92.0,if muted{"恢复"}else{"静音"},9.5,W::Semibold,theme::WHITE,H::Center);
+    }
+
+    fn draw_music_lyrics(&mut self,c:&Card) {
+        let col=c.clipped(243.0,28.0,136.0,74.0);
+        c.seg((233.0,32.0),(233.0,98.0),1.0,Color32::from_gray(35));
+        if let Some(lyrics)=&self.ly.lyrics {
+            let current=if lyrics.synced {lyrics.index_at(self.lyric_position())}else{Some(0)};
+            let target=current.unwrap_or(0);
+            let id=egui::Id::new("music-lyrics-scroll");
+            if !self.ly.scroll_animation_started {
+                c.ui.ctx().animate_value_with_time(id,target as f32,0.0);
+                self.ly.scroll_animation_started=true;
+            }
+            let position=c.ui.ctx().animate_value_with_time(id,target as f32,0.3);
+            let first=(position.floor() as usize).saturating_sub(2);
+            for (index,line) in lyrics.lines.iter().enumerate().skip(first).take(6) {
+                let distance=index as f32-position;
+                if distance.abs()>2.2 {continue;}
+                let active=current==Some(index);
+                let ink=if active {theme::WHITE}else{theme::GRAY};
+                let row=col.faded((1.0-distance.abs()*0.35).clamp(0.0,1.0));
+                let font=row.font(if active {12.0}else{10.0},if active {W::Semibold}else{W::Regular});
+                // 维语等从右往左的歌词：先按阅读顺序分行再逐行转换（#200）。
+                let text=crate::rtl_text::display_wrapped(&line.text,132.0*c.s,|s|row.painter.layout_no_wrap(s.to_owned(),font.clone(),ink).size().x).into_owned();
+                let mut job=egui::text::LayoutJob::simple(text,font,ink,132.0*c.s);
+                job.wrap.max_rows=if active {3}else{1};
+                job.wrap.break_anywhere=true;
+                let galley=row.painter.layout_job(job);
+                let y=64.0+distance*29.0-galley.size().y/(2.0*c.s);
+                row.painter.galley(row.pos(246.0,y),galley,ink);
+            }
+            if !lyrics.synced {col.text(246.0,39.0,"文本歌词",8.0,W::Regular,theme::GRAY,H::Left);}
+        } else {
+            let status=if self.ly.loading {"正在查找歌词…"}else if let Some(error)=&self.ly.error {error.label()}else{"暂无歌词"};
+            let galley=col.painter.layout(status.into(),col.font(10.0,W::Regular),theme::GRAY,130.0*c.s);
+            col.painter.galley(col.pos(246.0,61.0-galley.size().y/(2.0*c.s)),galley,theme::GRAY);
+            if self.ly.error.is_some() {
+                col.text(246.0,87.0,"点击重试",9.0,W::Regular,theme::GRAY,H::Left);
+                if c.hit(243.0,28.0,136.0,74.0,"lyrics-retry").on_hover_text("重新查询当前歌曲的歌词").clicked(){self.ly.key.clear();self.ly.manual_retry=true;}
+            }
+        }
     }
 
     // ================= 专注（番茄钟） =================

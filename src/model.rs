@@ -224,6 +224,7 @@ pub struct Settings {
     /// 岛上常驻四个性能小圆（CPU/内存/网速/GPU）：收起态常驻组件最右侧、
     /// 放歌时歌词栏右侧、展开音乐页右栏各一组；默认开启，旧配置无此键时也开启。
     pub show_perf: bool,
+    pub lyrics_enabled: bool,
     pub clock_12h: bool,
     pub clock_period: u8,
     pub clock_seconds: bool,
@@ -292,7 +293,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { display_id: String::new(), skin: Skin::Classic, island_shape: IslandShape::Notch, glass_blur: true, island_size: 100, island_offset: 0, oled_shift: false, dock: Dock::Top, settings_theme: Default::default(), pet: true, minimal: false, browser_minimal: false, avoid_browsers: true, avoid_apps: Vec::new(), visible_pages: [true; 10], page_order: [0,1,2,3,4,5,6,7,8,9], show_clock: true, show_battery: true, show_weather: true, show_perf: true, clock_12h: false, clock_period: 0, clock_seconds: false, resident_order: Vec::new(), system_hud: true, bluetooth_notifications: true, read_notifications:false, wechat_notifications:false, wecom_notifications:false, feishu_notifications:false, dingtalk_notifications:false, wechat_tray_open:false, qq_only:false, notification_preview:false, notifications: true, system_notify: true, sound: false, island_lyrics:true, lyric_delay_ms:-350, hide_fullscreen: true, avoid_top_bar: true, top_bar_on_top: false, focus_minutes: 25, rest_minutes: 5, water_minutes: 45, serving_ml: 250, water_start: 9, water_end: 22, sit_remind: true, sit_minutes: 60, lunch_rest: true, lunch_start: 720, lunch_end: 810, mail_enabled: true, mail_sync_operations:false, mail_code: true, mail_code_hide_seconds:60, mail_interval: 120, mail_ics: 15, ignored_mail_events: Vec::new(), calendar_prompt: true, calendar_auto_sync: true, clipboard_history: true, weather_city: String::new(), weather_position: None, weather_saved: Vec::new(), render_compat: false, render_compat_reason: String::new() }
+        Self { display_id: String::new(), skin: Skin::Classic, island_shape: IslandShape::Notch, glass_blur: true, island_size: 100, island_offset: 0, oled_shift: false, dock: Dock::Top, settings_theme: Default::default(), pet: true, minimal: false, browser_minimal: false, avoid_browsers: true, avoid_apps: Vec::new(), visible_pages: [true; 10], page_order: [0,1,2,3,4,5,6,7,8,9], show_clock: true, show_battery: true, show_weather: true, show_perf: true, lyrics_enabled:true, clock_12h: false, clock_period: 0, clock_seconds: false, resident_order: Vec::new(), system_hud: true, bluetooth_notifications: true, read_notifications:false, wechat_notifications:false, wecom_notifications:false, feishu_notifications:false, dingtalk_notifications:false, wechat_tray_open:false, qq_only:false, notification_preview:false, notifications: true, system_notify: true, sound: false, island_lyrics:true, lyric_delay_ms:-350, hide_fullscreen: true, avoid_top_bar: true, top_bar_on_top: false, focus_minutes: 25, rest_minutes: 5, water_minutes: 45, serving_ml: 250, water_start: 9, water_end: 22, sit_remind: true, sit_minutes: 60, lunch_rest: true, lunch_start: 720, lunch_end: 810, mail_enabled: true, mail_sync_operations:false, mail_code: true, mail_code_hide_seconds:60, mail_interval: 120, mail_ics: 15, ignored_mail_events: Vec::new(), calendar_prompt: true, calendar_auto_sync: true, clipboard_history: true, weather_city: String::new(), weather_position: None, weather_saved: Vec::new(), render_compat: false, render_compat_reason: String::new() }
     }
 }
 
@@ -375,6 +376,8 @@ impl Settings {
                 "show_clock" => s.show_clock = v != "0",
                 "show_weather" => s.show_weather = v != "0",
                 "show_perf" => s.show_perf = v != "0",
+                "lyrics_enabled" => s.lyrics_enabled = v != "0",
+                "island_lyrics" => s.island_lyrics = v == "1",
                 "visible_pages" if (6..=10).contains(&v.len()) && v.bytes().all(|b| b==b'0' || b==b'1') => {
                     for (enabled,value) in s.visible_pages.iter_mut().zip(v.bytes()) { *enabled=value==b'1'; }
                     for enabled in &mut s.visible_pages[v.len()..]{*enabled=v.bytes().any(|b|b==b'1');}
@@ -427,8 +430,6 @@ impl Settings {
             }
         }
         if !s.visible_pages.contains(&true) { s.visible_pages[0]=true; }
-        // 歌词固定显示在收起的岛上：旧配置里的开关不再生效。
-        s.island_lyrics=true;
         // 旧版只有一个指定城市：迁移进已保存列表，升级后下拉框里能直接看到它。
         if let Some(position)=s.weather_position.clone().filter(|p|p.label==s.weather_city) {
             if !s.weather_saved.contains(&position) {s.weather_saved.insert(0,position);}
@@ -465,6 +466,7 @@ impl Settings {
                 ("show_clock".into(), (self.show_clock as u8).to_string()),
                 ("show_weather".into(), (self.show_weather as u8).to_string()),
                 ("show_perf".into(), (self.show_perf as u8).to_string()),
+                ("lyrics_enabled".into(), (self.lyrics_enabled as u8).to_string()),
                 ("read_notifications".into(),(self.read_notifications as u8).to_string()),
                 ("wechat_notifications".into(),(self.wechat_notifications as u8).to_string()),
                 ("wecom_notifications".into(),(self.wecom_notifications as u8).to_string()),
@@ -478,7 +480,7 @@ impl Settings {
                 ("notifications".into(), (self.notifications as u8).to_string()),
                 ("system_notify".into(), (self.system_notify as u8).to_string()),
                 ("sound".into(), (self.sound as u8).to_string()),
-                ("island_lyrics".into(),"1".into()),
+                ("island_lyrics".into(), (self.island_lyrics as u8).to_string()),
                 ("lyric_delay_ms".into(),self.lyric_delay_ms.to_string()),
                 ("hide_fullscreen".into(), (self.hide_fullscreen as u8).to_string()),
                 ("avoid_top_bar".into(), (self.avoid_top_bar as u8).to_string()),
