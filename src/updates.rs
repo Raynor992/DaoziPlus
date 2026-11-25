@@ -10,10 +10,10 @@ const STARTUP_DELAY: Duration = Duration::from_secs(10);
 const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 3600);
 const RETRY_INTERVAL: Duration = Duration::from_secs(3600);
 const MANUAL_INTERVAL: Duration = Duration::from_secs(30);
-/// 仓库为私有仓库，匿名请求 api.github.com 拿不到 Release，检查更新必然失败。
-/// 这里统一关闭：启动后不再发后台请求，设置页也不再显示「检查更新」入口。
-/// 若以后把仓库改为公开并按 tag 发布 Release，把这里改回 `true` 即可恢复。
-const ENABLED: bool = false;
+/// 仓库已公开，匿名请求可读取 Release，检查更新正常启用。
+/// 发布新版本时需在 GitHub 上传与 tag 匹配的 DaozaiPlus-v<版本>-windows-x64.zip，
+/// 且 zip 内路径为 DaozaiPlus-v<版本>-windows-x64/daozai-plus.exe，否则只能浏览器下载。
+const ENABLED: bool = true;
 
 #[derive(Clone, Debug)]
 struct Release { version: String, notes: String, page: String, package: Option<Package> }
@@ -561,7 +561,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "检查更新已关闭（ENABLED=false）；恢复更新入口后去掉本行"]
     fn recent_check_keeps_its_result_on_manual_retry() {
         let ctx = egui::Context::default();
         for result in [Ok(None), Err("更新服务拒绝访问".into())] {
