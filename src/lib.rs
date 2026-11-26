@@ -34,6 +34,7 @@ pub mod mail_manage;
 mod mail_manage_ui;
 pub mod clipboard;
 pub mod like;
+pub mod netease_likes;
 pub mod side_dock;
 mod task_picker;
 pub mod model;

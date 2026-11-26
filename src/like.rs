@@ -65,6 +65,15 @@ impl Likes {
         liked
     }
 
+    /// 显式设置收藏状态（用于与播放器真实状态对齐），返回是否发生变化。
+    pub fn set(&mut self, title: &str, artist: &str, liked: bool) -> bool {
+        let key = song_key(title, artist);
+        if key == "|" { return false; }
+        let changed = if liked { self.keys.insert(key) } else { self.keys.remove(&key) };
+        if changed { self.save(); }
+        changed
+    }
+
     pub fn len(&self) -> usize { self.keys.len() }
 }
 

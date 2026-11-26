@@ -883,6 +883,10 @@ pub struct App {
     pub(crate) show_lyrics: bool,
     /// 「喜欢」按钮的本地收藏列表（按歌曲持久化，切歌自动识别）。
     pub(crate) likes: crate::like::Likes,
+    /// 网易云本地「我喜欢的音乐」歌单缓存：让岛仔红心与播放器里的真实状态一致。
+    pub(crate) netease_likes: crate::netease_likes::NeteaseLikes,
+    /// 刚点过红心后的短时状态覆盖（歌曲键 -> (目标状态, 时刻)）：给播放器写库留时间，避免回跳。
+    pub(crate) like_override: Option<(String, bool, f64)>,
     /// 上一次看到的蓝牙设备，用来只在连接/断开时提示一次。
     pub(crate) bt_shown: Vec<crate::bt::Device>,
     bt_initialized: bool,
@@ -1025,6 +1029,8 @@ impl App {
             music_restart_at: None,
             show_lyrics: initial_lyrics,
             likes: crate::like::Likes::load(),
+            netease_likes: crate::netease_likes::NeteaseLikes::default(),
+            like_override: None,
             bt_shown: Vec::new(),
             bt_initialized: false,
             mail: MailState { accounts: mail::load_accounts(), ..Default::default() },
@@ -1047,6 +1053,33 @@ impl App {
     pub fn messenger_unavailable(&mut self, message: impl Into<String>) {
         self.say(message);
         self.toast_below = true;
+    }
+
+    /// 当前歌曲是否显示为红心：网易云能读到真实歌单时以它为准，否则回退本地收藏。
+    /// 刚点过红心后的 3 秒内用本地目标状态覆盖，给播放器写库留时间，避免图标回跳。
+    pub(crate) fn is_current_liked(&self) -> bool {
+        let np = &self.media;
+        if np.title.is_empty() { return false; }
+        let key = format!("{}|{}", np.title.trim().to_lowercase(), np.artist.trim().to_lowercase());
+        if let Some((override_key, value, at)) = &self.like_override {
+            if override_key == &key && self.t - *at < 3.0 { return *value; }
+        }
+        let is_netease = np.source.eq_ignore_ascii_case("cloudmusic.exe");
+        if is_netease {
+            if let Some(liked) = self.netease_likes.is_liked(np.song_id) { return liked; }
+        }
+        self.likes.is_liked(&np.title, &np.artist)
+    }
+
+    /// 点红心后本地收藏应处于的目标状态（与显示状态取反）。
+    /// 同时设置短时覆盖并同步翻转本地记录，避免下次读不到数据库时状态回退。
+    pub(crate) fn toggle_current_liked(&mut self) -> bool {
+        let np = &self.media;
+        let now = !self.is_current_liked();
+        self.likes.set(&np.title, &np.artist, now);
+        let key = format!("{}|{}", np.title.trim().to_lowercase(), np.artist.trim().to_lowercase());
+        self.like_override = Some((key, now, self.t));
+        now
     }
 
     pub(crate) fn code_copied(&mut self, _code:&str) {
@@ -3236,6 +3269,8 @@ impl App {
     // 每帧推进：番茄钟、饮水提醒、跨天
     // ---------------------------------------------------------------
     fn tick(&mut self, env: &Env, dt: f32, elapsed: f32) {
+        // 刷新网易云「我喜欢的音乐」缓存（内部 3 秒节流 + 数据库 mtime 检测），让红心跟随播放器真实状态。
+        self.netease_likes.refresh();
         if self.toast.as_ref().is_some_and(|(_,at)|self.t-at>2.4){self.toast=None;}
         // 跳转后先用本地目标位置显示；播放器回报追上了、换歌了或超时就交还真实位置。
         let seek_done=self.music_seek_ui.as_ref().is_some_and(|(target,title)|{
