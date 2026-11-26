@@ -539,17 +539,18 @@ pub fn speaker(c:&Card,cx:f32,cy:f32,muted:bool,color:Color32) {
     }
 }
 
-/// 爱心：filled=true 实心填充，false 仅描边。size 为整体高度。
+/// 爱心：岛仔风格简洁几何心形，size 为整体宽度。filled=true 实心填充，false 细线描边。
 pub fn heart(c: &Card, cx: f32, cy: f32, size: f32, filled: bool, color: Color32) {
-    let s = size / 20.0;
-    // 以 (cx,cy) 为中心的标准心形采样点（上双瓣 + 下尖）。
-    let pts: Vec<(f32, f32)> = (0..=28).map(|i| {
-        let t = std::f32::consts::TAU * i as f32 / 28.0;
-        let x = 16.0 * t.sin().powi(3);
-        let y = 13.0 * t.cos() - 5.0 * (2.0 * t).cos() - 2.0 * (3.0 * t).cos() - (4.0 * t).cos();
-        (cx + x * s, cy - y * s)
-    }).collect();
-    if filled { c.poly(&pts, color); } else { c.path(&pts, 1.6, color); }
+    let w = size * 0.5;
+    let h = size * 0.46;
+    // 对称的折线心形（上双瓣 + 下尖），与岛仔其他图标一样用少量几何点，不画饱满曲线。
+    let shape = [
+        (0.00, 1.00), (-0.55, 0.42), (-0.92, -0.10), (-0.86, -0.58), (-0.44, -0.78),
+        (0.00, -0.48),
+        (0.44, -0.78), (0.86, -0.58), (0.92, -0.10), (0.55, 0.42),
+    ];
+    let pts: Vec<(f32, f32)> = shape.iter().map(|&(nx, ny)| (cx + nx * w, cy + ny * h)).collect();
+    if filled { c.poly(&pts, color); } else { c.path(&pts, 1.4, color); }
 }
 
 pub fn note(c: &Card, cx: f32, cy: f32, size: f32, color: Color32) {

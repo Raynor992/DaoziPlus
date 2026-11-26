@@ -132,7 +132,7 @@ impl App {
         let liked=has && self.likes.is_liked(&np.title,&np.artist);
         let like_ink=if !has {Color32::from_rgb(88,88,92)}else if liked {theme::RED}else{theme::GRAY};
         let (like_button,like_card)=btn(118.0,26.0,"m-like");
-        paint::heart(&like_card,118.0,y,15.0,liked,like_ink);
+        paint::heart(&like_card,118.0,y,13.0,liked,like_ink);
         let (previous,previous_card)=btn(162.0,30.0,"m-prev");
         paint::skip(&previous_card,162.0,y,-1.0,ic);
         let (play,play_card)=btn(210.5,30.0,"m-play");
