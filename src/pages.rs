@@ -128,6 +128,11 @@ impl App {
         };
         let (lyrics_button,lyrics_card)=btn(74.0,26.0,"m-lyr");
         lyrics_card.text(74.0,y+5.0,"词",14.0,W::Semibold,if !has {ic}else if self.show_lyrics {theme::WHITE}else{theme::GRAY},H::Center);
+        // 「喜欢」：红框区（词与上一首之间）。实心红心=已收藏；点击切换并尽力同步到播放器。
+        let liked=has && self.likes.is_liked(&np.title,&np.artist);
+        let like_ink=if !has {Color32::from_rgb(88,88,92)}else if liked {theme::RED}else{theme::GRAY};
+        let (like_button,like_card)=btn(118.0,26.0,"m-like");
+        paint::heart(&like_card,118.0,y,15.0,liked,like_ink);
         let (previous,previous_card)=btn(162.0,30.0,"m-prev");
         paint::skip(&previous_card,162.0,y,-1.0,ic);
         let (play,play_card)=btn(210.5,30.0,"m-play");
@@ -152,6 +157,16 @@ impl App {
             if previous.clicked() {self.music_restart_at=Some(self.t);self.music_seek_ui=None;cmds.push(Cmd::Media(Transport::Prev));}
             if play.clicked() {cmds.push(Cmd::Media(Transport::Toggle));}
             if next.clicked() {self.music_restart_at=Some(self.t);self.music_seek_ui=None;cmds.push(Cmd::Media(Transport::Next));}
+        }
+        let like_hint=if !has {"先放一首歌吧"}else if liked {"取消喜欢（同时在播放器里取消）"}else{"喜欢这首歌（同时加入播放器的我喜欢）"};
+        if like_button.on_hover_text(like_hint).clicked() {
+            if !has {self.say("先放一首歌吧");}
+            else {
+                let now_liked=self.likes.toggle(&np.title,&np.artist);
+                // 尽力把动作转发给当前播放器，让它写进账号的「我喜欢」；快捷键未启用时本地收藏仍有效。
+                cmds.push(Cmd::Like(np.source.clone()));
+                self.say(if now_liked {"已加入我喜欢"}else{"已取消喜欢"});
+            }
         }
         if lyrics_button.on_hover_text(if self.show_lyrics {"隐藏歌词"}else{"显示歌词"}).clicked() {
             if !has {self.say("先放一首歌吧");}

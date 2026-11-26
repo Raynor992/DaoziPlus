@@ -539,6 +539,19 @@ pub fn speaker(c:&Card,cx:f32,cy:f32,muted:bool,color:Color32) {
     }
 }
 
+/// 爱心：filled=true 实心填充，false 仅描边。size 为整体高度。
+pub fn heart(c: &Card, cx: f32, cy: f32, size: f32, filled: bool, color: Color32) {
+    let s = size / 20.0;
+    // 以 (cx,cy) 为中心的标准心形采样点（上双瓣 + 下尖）。
+    let pts: Vec<(f32, f32)> = (0..=28).map(|i| {
+        let t = std::f32::consts::TAU * i as f32 / 28.0;
+        let x = 16.0 * t.sin().powi(3);
+        let y = 13.0 * t.cos() - 5.0 * (2.0 * t).cos() - 2.0 * (3.0 * t).cos() - (4.0 * t).cos();
+        (cx + x * s, cy - y * s)
+    }).collect();
+    if filled { c.poly(&pts, color); } else { c.path(&pts, 1.6, color); }
+}
+
 pub fn note(c: &Card, cx: f32, cy: f32, size: f32, color: Color32) {
     let s = size;
     c.circle(cx - s * 0.24, cy + s * 0.28, s * 0.14, color);

@@ -176,6 +176,8 @@ pub enum NotificationSound { Silent, System, Health }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     Media(Transport),
+    /// 把当前歌曲的「喜欢」动作转发给播放器（携带播放器身份，用于选快捷键映射）。
+    Like(String),
     Open(PathBuf),
     ViewMessenger(Unread),
     OpenUrl(String),
@@ -879,6 +881,8 @@ pub struct App {
     pub(crate) music_restart_at: Option<f64>,
     /// 展开音乐页是否显示同步歌词（原版行为，由页面上的「词」按钮切换）。
     pub(crate) show_lyrics: bool,
+    /// 「喜欢」按钮的本地收藏列表（按歌曲持久化，切歌自动识别）。
+    pub(crate) likes: crate::like::Likes,
     /// 上一次看到的蓝牙设备，用来只在连接/断开时提示一次。
     pub(crate) bt_shown: Vec<crate::bt::Device>,
     bt_initialized: bool,
@@ -1020,6 +1024,7 @@ impl App {
             music_seek_quiet_until: 0.0,
             music_restart_at: None,
             show_lyrics: initial_lyrics,
+            likes: crate::like::Likes::load(),
             bt_shown: Vec::new(),
             bt_initialized: false,
             mail: MailState { accounts: mail::load_accounts(), ..Default::default() },

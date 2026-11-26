@@ -1658,6 +1658,29 @@ fn web_video_is_hidden_without_changing_music_preferences(){
 }
 
 #[test]
+fn like_button_toggles_local_favorite_and_forwards_to_player(){
+    let _g=ENV_LOCK.lock().unwrap_or_else(|e|e.into_inner());
+    let mut h=H::new();
+    h.media=crate::smtc::NowPlaying{source:"cloudmusic.exe".into(),title:"浪漫爱".into(),artist:"刘瑞琦".into(),duration:200.0,..Default::default()};
+    h.hover(Pos2::new(WIN_W/2.0,12.0),1.0);
+    h.app.show_page(0);
+    assert!(!h.app.likes.is_liked("浪漫爱","刘瑞琦"));
+    // 点红框区的爱心（x≈118, y=118）。
+    h.click(H::local(118.0,118.0));
+    assert!(h.app.likes.is_liked("浪漫爱","刘瑞琦"),"点击后应记到喜欢列表");
+    assert!(h.cmds.contains(&crate::app::Cmd::Like("cloudmusic.exe".into())),"应把喜欢动作转发给播放器");
+    // 换一首歌应显示未喜欢；切回来仍是已喜欢（切歌自动识别）。
+    h.media.title="晴天".into();h.media.artist="周杰伦".into();h.frame(vec![]);
+    assert!(!h.app.likes.is_liked("晴天","周杰伦"));
+    h.media.title="浪漫爱".into();h.media.artist="刘瑞琦".into();h.frame(vec![]);
+    assert!(h.app.likes.is_liked("浪漫爱","刘瑞琦"),"切回已收藏歌曲应保持红心");
+    h.cmds.clear();
+    h.click(H::local(118.0,118.0));
+    assert!(!h.app.likes.is_liked("浪漫爱","刘瑞琦"),"再点一次应取消喜欢");
+    assert!(h.cmds.contains(&crate::app::Cmd::Like("cloudmusic.exe".into())));
+}
+
+#[test]
 fn web_video_does_not_override_the_minimal_island(){
     let _g=ENV_LOCK.lock().unwrap_or_else(|e|e.into_inner());
     let mut h=H::new();h.app.settings.minimal=true;

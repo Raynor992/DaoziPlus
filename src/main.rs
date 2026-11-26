@@ -683,6 +683,13 @@ impl eframe::App for Shell {
                         Ok(Some(rx))=>self.seek_rx=Some((message,rx)),Ok(None)=>{},Err(())=>self.app.say("播放器正在响应，请稍后重试"),
                     }
                 }
+                Cmd::Like(source)=>{
+                    // 尽力同步到播放器的「我喜欢」：发送它自己的快捷键。
+                    // 本地列表已在音乐页即时更新，这里失败也不影响按钮状态。
+                    if !daozai::like::notify_player(&source) {
+                        self.app.say("已记到岛仔的喜欢列表；该播放器暂无可自动触发的喜欢快捷键");
+                    }
+                }
                 Cmd::MusicVolume(command,source)=>{
                     self.media_fast_until=Some(Instant::now()+Duration::from_secs(3));self.media_enabled.set_interval(smtc::POLL_FAST);
                     if self.media_control.is_none(){self.media_control=smtc::ControlWorker::start(ctx.clone());}
